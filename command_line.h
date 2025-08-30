@@ -237,90 +237,110 @@ namespace matteaz
 
 		constexpr options_iterator &operator ++ ()
 		{
-			if (_Offset == _Normalized.length() && _Normalized.empty() == false)
+			auto iterator = _Iterator;
+			std::optional < std::string > normalized;
+			auto offset = _Offset;
+
+			try
 			{
-				++_Iterator;
-
-				if (_Iterator == _Iterator.end())
-				{
-					_Offset = _Normalized.npos;
-
-					return *this;
-				}
-
-				_Normalized = _Iterator.get_normalized_argument();
-				_Offset = 0;
-			}
-
-			if (_Offset == 0)
-			{
-				if (_Normalized.starts_with('-') == false || _Normalized.length() == 1)
-				{
-					_Offset = _Normalized.npos;
-
-					return *this;
-				}
-
-				if (_Normalized == "--")
+				if (_Offset == _Normalized.length() && _Normalized.empty() == false)
 				{
 					++_Iterator;
-					_Offset = _Normalized.npos;
 
-					return *this;
+					if (_Iterator == _Iterator.end())
+					{
+						_Offset = _Normalized.npos;
+
+						return *this;
+					}
+
+					normalized = std::move(_Normalized);
+					_Normalized = _Iterator.get_normalized_argument();
+					_Offset = 0;
 				}
 
-				_Offset = 1;
-			}
+				if (_Offset == 0)
+				{
+					if (_Normalized.starts_with('-') == false || _Normalized.length() == 1)
+					{
+						_Offset = _Normalized.npos;
 
-			auto current = _Normalized.begin() + _Offset;
-			auto option = *current;
-			auto next = current + 1;
+						return *this;
+					}
 
-			switch (_Find(option))
-			{
-				case 2:
-					if (next == _Normalized.end())
+					if (_Normalized == "--")
 					{
 						++_Iterator;
+						_Offset = _Normalized.npos;
 
-						if (_Iterator == _Iterator.end())
-							throw std::logic_error("missing option argument");
-
-						_Normalized = _Iterator.get_normalized_argument();
-						_Offset = _Normalized.length();
-						_Argument = _Normalized;
-					}
-					else
-					{
-						_Offset = _Normalized.length();
-						_Argument = std::string_view(next, _Normalized.end());
+						return *this;
 					}
 
-					_Option = option;
-					_HasArgument = true;
+					_Offset = 1;
+				}
 
-					break;
-				case 3:
-					_Offset = _Normalized.length();
+				auto option = _Normalized[_Offset];
 
-					if (next == _Normalized.end())
-						_HasArgument = false;
-					else
-					{
-						_Argument = std::string_view(next, _Normalized.end());
+				switch (_Find(option))
+				{
+					case 2:
+						++_Offset;
+
+						if (_Offset == _Normalized.length())
+						{
+							++_Iterator;
+
+							if (_Iterator == _Iterator.end())
+								throw std::logic_error("missing option argument");
+
+							if (normalized.has_value() == false)
+								normalized = std::move(_Normalized);
+
+							_Normalized = _Iterator.get_normalized_argument();
+							_Argument = _Normalized;
+						}
+						else
+							_Argument = std::string_view(_Normalized.begin() + _Offset, _Normalized.end());
+
+						_Offset = _Normalized.length();
+						_Option = option;
 						_HasArgument = true;
-					}
 
-					_Option = option;
+						break;
+					case 3:
+						++_Offset;
 
-					break;
-				default:
-					++_Offset;
-					_Argument = _Normalized;
-					_Option = option;
-					_HasArgument = true;
+						if (_Offset == _Normalized.length())
+							_HasArgument = false;
+						else
+						{
+							_Argument = std::string_view(_Normalized.begin() + _Offset, _Normalized.end());
+							_HasArgument = true;
+						}
+					
+						_Offset = _Normalized.length();
+						_Option = option;
 
-					break;
+						break;
+					default:
+						++_Offset;
+						_Argument = _Normalized;
+						_Option = option;
+						_HasArgument = true;
+
+						break;
+				}
+			}
+			catch (...)
+			{
+				_Iterator = iterator;
+
+				if (normalized.has_value())
+					_Normalized = std::move(*normalized);
+
+				_Offset = offset;
+
+				throw;
 			}
 
 			return *this;
